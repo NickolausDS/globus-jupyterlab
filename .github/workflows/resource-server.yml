@@ -1,4 +1,4 @@
-name: ci
+name: jupyterhub-service-testing-ci
 
 on:
   push:
