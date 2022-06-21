@@ -20,3 +20,4 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
           buildargs: PYTHON_VERSION
           tags: "latest"
+          workdir: "globus_jupyterlab/tests/integration/hub-service"
