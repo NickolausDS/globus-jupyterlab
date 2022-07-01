@@ -37,6 +37,17 @@ class GlobusConfig:
         """Setter for last login. Should only be called by Login handlers."""
         self._last_login = value
 
+    def check_env_boolean(self, env_value: str, default: bool) -> bool:
+        value = os.getenv(env_value)
+        if value not in ["true", "false", None]:
+            raise ValueError(f'{env_value}: Must be set to "true" or "false"')
+        if value == "true":
+            return True
+        elif value == "false":
+            return False
+        else:
+            return default
+
     def get_refresh_tokens(self) -> bool:
         """
         Should JupyterLab use Refresh tokens? Default is False. When True,
@@ -51,8 +62,7 @@ class GlobusConfig:
         * 'true' -- use refresh tokens
         * 'false' -- do not use refresh tokens
         """
-        refresh_tokens = os.getenv("GLOBUS_REFRESH_TOKENS", False)
-        return True if refresh_tokens == "true" else False
+        return self.check_env_boolean("GLOBUS_REFRESH_TOKENS", default=False)
 
     def get_named_grant(self) -> str:
         """
@@ -133,6 +143,12 @@ class GlobusConfig:
         """
         env = os.getenv("GLOBUS_COLLECTION_PATH", None)
         return env or os.getcwd()
+
+    def get_posix_basepath(self) -> str:
+        return os.getenv("GLOBUS_POSIX_BASEPATH", "")
+
+    def get_collection_basepath(self) -> str:
+        return os.getenv("GLOBUS_COLLECTION_BASEPATH", "")
 
     def get_transfer_submission_url(self) -> str:
         """
