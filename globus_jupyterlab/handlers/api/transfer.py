@@ -100,7 +100,6 @@ class SubmitTransfer(GCSAuthMixin, POSTMethodTransferAPIEndpoint):
                 response = self.submit_custom_transfer(tm)
             else:
                 response = self.submit_normal_transfer(tm)
-            self.log.info("User transfer submission succeeded.")
             return response
         except pydantic.ValidationError as ve:
             self.set_status(400)
@@ -138,19 +137,43 @@ class SubmitTransfer(GCSAuthMixin, POSTMethodTransferAPIEndpoint):
             )
             result = requests.post(url, headers=headers, json=document)
             result.raise_for_status()
-            self.set_status(result.status_code)
-            data = result.json()
-            if "task_id" not in data:
-                self.log.error(f"Response from {url} did not return a task ID!")
-                data["task_id"] = None
-            return data
+            response_data = result.json()
+            if not response_data.get("task_id"):
+                self.set_status(503)
+                self.log.error(
+                    "Transfer Failed, no task_id returned in "
+                    f" response: {json.dumps(response_data, indent=2)}"
+                )
+            else:
+                self.set_status(result.status_code)
+            return response_data
         except requests.exceptions.HTTPError as http_error:
-            self.set_status(503)
             self.log.error(
-                f"Request failed with error code: {http_error.response.status_code}",
+                f"Request failed ({http_error.response.status_code}): {str(http_error)}",
                 exc_info=True,
             )
-            return {"error": "Transfer Failed", "details": str(http_error)}
+            response = {"error": "Transfer Failed", "details": str(http_error)}
+            if http_error.response.status_code in [401, 400]:
+                self.set_status(500)
+                response = {"error": "Server Misconfigured"}
+                if http_error.response.status_code == 401:
+                    self.log.error(
+                        "Request raised 401, the user token used was invalid. Ensure "
+                        "'GLOBUS_TRANSFER_SUBMISSION_SCOPE', 'GLOBUS_TRANSFER_SUBMISSION_IS_HUB_SERVICE' and "
+                        "'JUPYTERHUB_API_TOKEN' were properly set. Make sure to login again if changing SCOPE."
+                    )
+            elif http_error.response.status_code == 403:
+                self.set_status(http_error.response.status_code)
+                self.log.error(
+                    "Permission Denied, are users allowed to access this collection?"
+                )
+            else:
+                self.set_status(503)
+            return response
+        except requests.exceptions.ConnectionError as ce:
+            self.set_status(503)
+            self.log.error("Unable to connect", exc_info=True)
+            return {"error": "Transfer Failed", "details": str(ce)}
 
     def submit_normal_transfer(self, transfer_data: TransferModel):
         authorizer = self.login_manager.get_authorizer("transfer.api.globus.org")

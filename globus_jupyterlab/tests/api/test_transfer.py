@@ -557,30 +557,49 @@ def test_transfer_submission_custom_valid_hub_service(
 
 
 @pytest.mark.gen_test
-def test_transfer_submission_custom_no_task_id_returned(
+@pytest.mark.parametrize(
+    "returned_payload, custom_service_status, expected_lab_status_code",
+    [
+        # Expected
+        ({"task_id": "my_task_id"}, 200, 200),
+        # No payload returned
+        ({}, 200, 503),
+        # JupyterLab messed up somehow.
+        ({}, 400, 500),
+        # 401, JupyterLab messed up auth
+        ({}, 401, 500),
+        # Forbidden, pass through the error
+        ({}, 403, 403),
+        # External service not found
+        ({}, 404, 503),
+        # The external service messed up
+        ({}, 500, 503),
+        # Unexpected response. Panic slightly. Blame external service. Have tea?
+        ({}, 418, 503),
+    ],
+)
+def test_transfer_submission_custom_bad_values(
     http_client,
     base_url,
     transfer_client,
     sdk_error,
-    monkeypatch,
     post_request,
     logged_in_custom_transfer_service,
     mock_hub_env,
+    returned_payload,
+    custom_service_status,
+    expected_lab_status_code,
 ):
-    post_request.return_value.data = {}
+    post_request.return_value.data = returned_payload
+    post_request.return_value.status_code = custom_service_status
 
-    transfer_client.submit_transfer.return_value = SDKResponse(
-        data={"task_id": "my_taks_id"}
-    )
     body = json.dumps(
         {"source_endpoint": "mysource", "destination_endpoint": "mydest", "DATA": []}
     )
     response = yield http_client.fetch(
         base_url + f"/submit_transfer", raise_error=False, method="POST", body=body
     )
-    assert response.code == 200
-    data = json.loads(response.body.decode("utf-8"))
-    assert data == {"task_id": None}
+    assert response.code == expected_lab_status_code
 
 
 @pytest.mark.gen_test

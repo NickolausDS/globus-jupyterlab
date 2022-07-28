@@ -79,9 +79,11 @@ def post_request(monkeypatch):
         status_code = 200
 
         def raise_for_status(self):
-            if self.status_code == 500:
+            if self.status_code == 404:
+                raise requests.exceptions.ConnectionError()
+            elif self.status_code >= 400:
                 response = Mock()
-                response.status_code = 500
+                response.status_code = self.status_code
                 raise requests.exceptions.HTTPError(response=response)
 
         def json(self):
